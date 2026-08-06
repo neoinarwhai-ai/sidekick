@@ -230,6 +230,10 @@ const Canvas = forwardRef(function Canvas(
   ref
 ) {
   const [widgets, setWidgets] = useState([]);
+  const widgetsRef = useRef(widgets);
+  useEffect(() => {
+    widgetsRef.current = widgets;
+  }, [widgets]);
   const dragState = useRef(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, widgetId }
 
@@ -330,7 +334,7 @@ const Canvas = forwardRef(function Canvas(
     dragState.current = null;
     if (!d) return;
 
-    const widget = widgets.find((w) => w.id === d.id);
+    const widget = widgetsRef.current.find((w) => w.id === d.id);
     if (!widget) return;
 
     if (!d.moved) {
@@ -379,7 +383,7 @@ const Canvas = forwardRef(function Canvas(
     window.removeEventListener('mouseup', endResize);
     resizeState.current = null;
     if (!r) return;
-    const widget = widgets.find((w) => w.id === r.id);
+    const widget = widgetsRef.current.find((w) => w.id === r.id);
     if (!widget) return;
     const { error } = await supabase
       .from('widgets')
