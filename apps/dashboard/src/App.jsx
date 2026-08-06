@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
 
 function LoginScreen() {
@@ -208,6 +208,15 @@ function WidgetContent({ widget }) {
           style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
         />
       );
+    case 'browser':
+      return (
+        <iframe
+          src={widget.props?.url}
+          title="browser source"
+          style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+          allow="autoplay; encrypted-media"
+        />
+      );
     case 'timer':
       return <TimerDisplay endsAt={widget.props?.endsAt} label={widget.props?.label} />;
     case 'text':
@@ -216,7 +225,10 @@ function WidgetContent({ widget }) {
   }
 }
 
-function Canvas({ sceneId, broadcasterId }) {
+const Canvas = forwardRef(function Canvas(
+  { sceneId, broadcasterId, selectedWidgetId, onSelectWidget = () => {} },
+  ref
+) {
   const [widgets, setWidgets] = useState([]);
   const dragState = useRef(null);
   const [contextMenu, setContextMenu] = useState(null); // { x, y, widgetId }
@@ -230,6 +242,7 @@ function Canvas({ sceneId, broadcasterId }) {
 
   useEffect(() => {
     if (!sceneId) return;
+    onSelectWidget(null);
     supabase
       .from('widgets')
       .select('*')
@@ -268,6 +281,12 @@ function Canvas({ sceneId, broadcasterId }) {
     addWidget('image', { url }, { w: 200, h: 200 });
   };
 
+  const addBrowserSourceWidget = () => {
+    const url = window.prompt('Browser Source URL:');
+    if (!url) return;
+    addWidget('browser', { url }, { w: 400, h: 300 });
+  };
+
   const addTimerWidget = () => {
     const seconds = parseInt(window.prompt('Timer duration in seconds:', '60'), 10);
     if (!seconds || seconds <= 0) return;
@@ -276,12 +295,14 @@ function Canvas({ sceneId, broadcasterId }) {
   };
 
   const startDrag = (widget, e) => {
+    if (e.button !== 0) return; // only the left button drags/selects
     dragState.current = {
       id: widget.id,
       startX: e.clientX,
       startY: e.clientY,
       origX: widget.position.x,
       origY: widget.position.y,
+      moved: false,
     };
     window.addEventListener('mousemove', onDrag);
     window.addEventListener('mouseup', endDrag);
@@ -290,8 +311,11 @@ function Canvas({ sceneId, broadcasterId }) {
   const onDrag = (e) => {
     const d = dragState.current;
     if (!d) return;
-    const nextX = d.origX + (e.clientX - d.startX);
-    const nextY = d.origY + (e.clientY - d.startY);
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true;
+    const nextX = d.origX + dx;
+    const nextY = d.origY + dy;
     setWidgets((prev) =>
       prev.map((w) =>
         w.id === d.id ? { ...w, position: { ...w.position, x: nextX, y: nextY } } : w
@@ -305,37 +329,85 @@ function Canvas({ sceneId, broadcasterId }) {
     window.removeEventListener('mouseup', endDrag);
     dragState.current = null;
     if (!d) return;
-    const moved = widgets.find((w) => w.id === d.id);
-    if (!moved) return;
+
+    const widget = widgets.find((w) => w.id === d.id);
+    if (!widget) return;
+
+    if (!d.moved) {
+      // it was a click, not a drag — select it for editing in the sidebar
+      onSelectWidget(widget);
+      return;
+    }
+
     const { error } = await supabase
       .from('widgets')
-      .update({ position: moved.position })
+      .update({ position: widget.position })
       .eq('id', d.id);
     if (error) console.error('persist position error', error);
+  };
+
+  const resizeState = useRef(null);
+
+  const startResize = (widget, e) => {
+    if (e.button !== 0) return;
+    resizeState.current = {
+      id: widget.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      origW: widget.position.w,
+      origH: widget.position.h,
+    };
+    window.addEventListener('mousemove', onResize);
+    window.addEventListener('mouseup', endResize);
+  };
+
+  const onResize = (e) => {
+    const r = resizeState.current;
+    if (!r) return;
+    const nextW = Math.max(30, r.origW + (e.clientX - r.startX));
+    const nextH = Math.max(30, r.origH + (e.clientY - r.startY));
+    setWidgets((prev) =>
+      prev.map((w) =>
+        w.id === r.id ? { ...w, position: { ...w.position, w: nextW, h: nextH } } : w
+      )
+    );
+  };
+
+  const endResize = async () => {
+    const r = resizeState.current;
+    window.removeEventListener('mousemove', onResize);
+    window.removeEventListener('mouseup', endResize);
+    resizeState.current = null;
+    if (!r) return;
+    const widget = widgets.find((w) => w.id === r.id);
+    if (!widget) return;
+    const { error } = await supabase
+      .from('widgets')
+      .update({ position: widget.position })
+      .eq('id', r.id);
+    if (error) console.error('persist size error', error);
   };
 
   const removeWidget = async (id) => {
     setContextMenu(null);
     setWidgets((prev) => prev.filter((w) => w.id !== id));
+    onSelectWidget((current) => (current?.id === id ? null : current));
     const { error } = await supabase.from('widgets').delete().eq('id', id);
     if (error) console.error('remove widget error', error);
   };
 
-  const updateWidgetText = (id, text) => {
-    setWidgets((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, props: { ...w.props, text } } : w))
-    );
-  };
-
-  const persistWidgetText = async (id) => {
-    const widget = widgets.find((w) => w.id === id);
-    if (!widget) return;
-    const { error } = await supabase
-      .from('widgets')
-      .update({ props: widget.props })
-      .eq('id', id);
-    if (error) console.error('persist text error', error);
-  };
+  useImperativeHandle(ref, () => ({
+    updateText: (id, text) => {
+      setWidgets((prev) =>
+        prev.map((w) => (w.id === id ? { ...w, props: { ...w.props, text } } : w))
+      );
+    },
+    persistText: async (id, props) => {
+      const { error } = await supabase.from('widgets').update({ props }).eq('id', id);
+      if (error) console.error('persist text error', error);
+    },
+    removeWidget,
+  }));
 
   return (
     <div className="canvas-wrap">
@@ -346,6 +418,9 @@ function Canvas({ sceneId, broadcasterId }) {
         <button className="ghost" onClick={addImageWidget}>
           + Add Image
         </button>
+        <button className="ghost" onClick={addBrowserSourceWidget}>
+          + Add Browser Source
+        </button>
         <button className="ghost" onClick={addTimerWidget}>
           + Add Timer
         </button>
@@ -354,7 +429,7 @@ function Canvas({ sceneId, broadcasterId }) {
         {widgets.map((w) => (
           <div
             key={w.id}
-            className="canvas-widget"
+            className={`canvas-widget ${w.id === selectedWidgetId ? 'selected' : ''}`}
             style={{
               left: w.position.x,
               top: w.position.y,
@@ -367,17 +442,14 @@ function Canvas({ sceneId, broadcasterId }) {
               setContextMenu({ x: e.clientX, y: e.clientY, widgetId: w.id });
             }}
           >
-            {w.type === 'text' ? (
-              <input
-                className="widget-text-input"
-                value={w.props?.text || ''}
-                onChange={(e) => updateWidgetText(w.id, e.target.value)}
-                onBlur={() => persistWidgetText(w.id)}
-                onMouseDown={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <WidgetContent widget={w} />
-            )}
+            <WidgetContent widget={w} />
+            <div
+              className="resize-handle"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                startResize(w, e);
+              }}
+            />
           </div>
         ))}
         {widgets.length === 0 && (
@@ -391,7 +463,7 @@ function Canvas({ sceneId, broadcasterId }) {
       </div>
     </div>
   );
-}
+});
 
 function SoundboardPanel({ broadcasterId, channel }) {
   const [sounds, setSounds] = useState([]);

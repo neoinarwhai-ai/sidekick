@@ -38,6 +38,15 @@ function WidgetContent({ widget }) {
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
         />
       );
+    case 'browser':
+      return (
+        <iframe
+          src={widget.props?.url}
+          title="browser source"
+          style={{ width: '100%', height: '100%', border: 'none' }}
+          allow="autoplay; encrypted-media"
+        />
+      );
     case 'timer':
       return <TimerDisplay endsAt={widget.props?.endsAt} label={widget.props?.label} />;
     case 'text':
