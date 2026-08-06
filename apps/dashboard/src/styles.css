@@ -360,6 +360,24 @@ button[disabled]:hover {
   cursor: grabbing;
 }
 
+.canvas-widget.selected {
+  box-shadow: 3px 3px 0 var(--hero-blue);
+  border-color: var(--hero-blue);
+}
+
+.resize-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  background: var(--sunburst);
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  cursor: nwse-resize;
+  z-index: 10;
+}
+
 .canvas-empty {
   position: absolute;
   inset: 0;
