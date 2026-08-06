@@ -6,6 +6,46 @@ function useQueryParam(name) {
   return value;
 }
 
+function TimerDisplay({ endsAt, label }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, endsAt - Date.now()));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemaining(Math.max(0, endsAt - Date.now()));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [endsAt]);
+
+  const totalSeconds = Math.floor(remaining / 1000);
+  const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+  const ss = String(totalSeconds % 60).padStart(2, '0');
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      {label && <div style={{ fontSize: '0.7em', opacity: 0.7 }}>{label}</div>}
+      <div>{mm}:{ss}</div>
+    </div>
+  );
+}
+
+function WidgetContent({ widget }) {
+  switch (widget.type) {
+    case 'image':
+      return (
+        <img
+          src={widget.props?.url}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        />
+      );
+    case 'timer':
+      return <TimerDisplay endsAt={widget.props?.endsAt} label={widget.props?.label} />;
+    case 'text':
+    default:
+      return <>{widget.props?.text}</>;
+  }
+}
+
 function TelestratorLayer({ broadcasterId }) {
   const canvasRef = useRef(null);
   const ctxRef = useRef(null);
@@ -207,7 +247,7 @@ export default function App() {
             color: '#14141a',
           }}
         >
-          {w.props?.text}
+          <WidgetContent widget={w} />
         </div>
       ))}
       <TelestratorLayer broadcasterId={broadcasterId} />

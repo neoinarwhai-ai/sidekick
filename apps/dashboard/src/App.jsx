@@ -176,6 +176,46 @@ function AlertsPanel() {
   );
 }
 
+function TimerDisplay({ endsAt, label }) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, endsAt - Date.now()));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemaining(Math.max(0, endsAt - Date.now()));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [endsAt]);
+
+  const totalSeconds = Math.floor(remaining / 1000);
+  const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+  const ss = String(totalSeconds % 60).padStart(2, '0');
+
+  return (
+    <div style={{ textAlign: 'center' }}>
+      {label && <div style={{ fontSize: '0.7em', opacity: 0.7 }}>{label}</div>}
+      <div>{mm}:{ss}</div>
+    </div>
+  );
+}
+
+function WidgetContent({ widget }) {
+  switch (widget.type) {
+    case 'image':
+      return (
+        <img
+          src={widget.props?.url}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
+        />
+      );
+    case 'timer':
+      return <TimerDisplay endsAt={widget.props?.endsAt} label={widget.props?.label} />;
+    case 'text':
+    default:
+      return <>{widget.props?.text || widget.type}</>;
+  }
+}
+
 function Canvas({ sceneId, broadcasterId }) {
   const [widgets, setWidgets] = useState([]);
   const dragState = useRef(null);
@@ -192,15 +232,15 @@ function Canvas({ sceneId, broadcasterId }) {
       });
   }, [sceneId]);
 
-  const addTextWidget = async () => {
+  const addWidget = async (type, props, size) => {
     const { data, error } = await supabase
       .from('widgets')
       .insert({
         scene_id: sceneId,
         broadcaster_id: broadcasterId,
-        type: 'text',
-        props: { text: 'New Text' },
-        position: { x: 40, y: 40, w: 220, h: 60, rotation: 0 },
+        type,
+        props,
+        position: { x: 40, y: 40, w: size.w, h: size.h, rotation: 0 },
       })
       .select()
       .single();
@@ -210,6 +250,21 @@ function Canvas({ sceneId, broadcasterId }) {
       return;
     }
     setWidgets((prev) => [...prev, data]);
+  };
+
+  const addTextWidget = () => addWidget('text', { text: 'New Text' }, { w: 220, h: 60 });
+
+  const addImageWidget = () => {
+    const url = window.prompt('Image URL:');
+    if (!url) return;
+    addWidget('image', { url }, { w: 200, h: 200 });
+  };
+
+  const addTimerWidget = () => {
+    const seconds = parseInt(window.prompt('Timer duration in seconds:', '60'), 10);
+    if (!seconds || seconds <= 0) return;
+    const label = window.prompt('Label (optional):', '') || '';
+    addWidget('timer', { endsAt: Date.now() + seconds * 1000, label }, { w: 160, h: 80 });
   };
 
   const startDrag = (widget, e) => {
@@ -257,6 +312,12 @@ function Canvas({ sceneId, broadcasterId }) {
         <button className="ghost" onClick={addTextWidget}>
           + Add Text
         </button>
+        <button className="ghost" onClick={addImageWidget}>
+          + Add Image
+        </button>
+        <button className="ghost" onClick={addTimerWidget}>
+          + Add Timer
+        </button>
       </div>
       <div className="canvas-board">
         {widgets.map((w) => (
@@ -271,11 +332,11 @@ function Canvas({ sceneId, broadcasterId }) {
             }}
             onMouseDown={(e) => startDrag(w, e)}
           >
-            {w.props?.text || w.type}
+            <WidgetContent widget={w} />
           </div>
         ))}
         {widgets.length === 0 && (
-          <div className="canvas-empty">Click "+ Add Text" to place your first widget.</div>
+          <div className="canvas-empty">Add a widget above to place your first one.</div>
         )}
       </div>
     </div>
