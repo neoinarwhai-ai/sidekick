@@ -370,6 +370,47 @@ button[disabled]:hover {
   font-size: 0.9rem;
 }
 
+.context-menu {
+  position: fixed;
+  background: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  box-shadow: 4px 4px 0 var(--ink);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0.6rem 1.2rem;
+  text-align: left;
+  color: var(--coral);
+}
+
+.context-menu button:hover {
+  background: #fff0f1;
+  transform: none;
+  box-shadow: none;
+}
+
+.widget-text-input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--ink);
+  outline: none;
+  cursor: text;
+}
+
 .sound-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -219,6 +219,14 @@ function WidgetContent({ widget }) {
 function Canvas({ sceneId, broadcasterId }) {
   const [widgets, setWidgets] = useState([]);
   const dragState = useRef(null);
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, widgetId }
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [contextMenu]);
 
   useEffect(() => {
     if (!sceneId) return;
@@ -306,6 +314,29 @@ function Canvas({ sceneId, broadcasterId }) {
     if (error) console.error('persist position error', error);
   };
 
+  const removeWidget = async (id) => {
+    setContextMenu(null);
+    setWidgets((prev) => prev.filter((w) => w.id !== id));
+    const { error } = await supabase.from('widgets').delete().eq('id', id);
+    if (error) console.error('remove widget error', error);
+  };
+
+  const updateWidgetText = (id, text) => {
+    setWidgets((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, props: { ...w.props, text } } : w))
+    );
+  };
+
+  const persistWidgetText = async (id) => {
+    const widget = widgets.find((w) => w.id === id);
+    if (!widget) return;
+    const { error } = await supabase
+      .from('widgets')
+      .update({ props: widget.props })
+      .eq('id', id);
+    if (error) console.error('persist text error', error);
+  };
+
   return (
     <div className="canvas-wrap">
       <div className="canvas-toolbar">
@@ -331,12 +362,31 @@ function Canvas({ sceneId, broadcasterId }) {
               height: w.position.h,
             }}
             onMouseDown={(e) => startDrag(w, e)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setContextMenu({ x: e.clientX, y: e.clientY, widgetId: w.id });
+            }}
           >
-            <WidgetContent widget={w} />
+            {w.type === 'text' ? (
+              <input
+                className="widget-text-input"
+                value={w.props?.text || ''}
+                onChange={(e) => updateWidgetText(w.id, e.target.value)}
+                onBlur={() => persistWidgetText(w.id)}
+                onMouseDown={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <WidgetContent widget={w} />
+            )}
           </div>
         ))}
         {widgets.length === 0 && (
           <div className="canvas-empty">Add a widget above to place your first one.</div>
+        )}
+        {contextMenu && (
+          <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+            <button onClick={() => removeWidget(contextMenu.widgetId)}>Remove</button>
+          </div>
         )}
       </div>
     </div>
